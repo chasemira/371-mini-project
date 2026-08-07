@@ -46,35 +46,46 @@ def handshake(sock):
       2) Reply SYN-ACK with our own random ISN + ack=their_ISN+1
       3) Wait for final ACK that confirms our ISN
     Returns a session dict, or None if something failed.
+
+    Leftover DATA from a previous crashed run is ignored until a real SYN arrives.
     """
     print("[HS] waiting for SYN...")
     sock.settimeout(TIMEOUT)
-    try:
-        raw, addr = sock.recvfrom(4096)
-    except socket.timeout:
+
+    # Keep reading until we see a valid SYN (skip stale data from old runs)
+    syn = None
+    addr = None
+    deadline = time.time() + TIMEOUT
+    while time.time() < deadline:
+        sock.settimeout(max(0.1, deadline - time.time()))
+        try:
+            raw, addr = sock.recvfrom(4096)
+        except socket.timeout:
+            break
+
+        cand = PacketHeader.from_bytes(raw)
+        if cand.syn and cand.verify_checksum():
+            syn = cand
+            break
+        print(f"[HS] ignore non-SYN (seq={cand.seq_num}) - waiting for SYN...")
+
+    if syn is None:
         print("[HS] no SYN")
         return None
 
-    syn = PacketHeader.from_bytes(raw)
-    # ppening packet must have SYN set and a valid checksum
-    if not syn.syn or not syn.verify_checksum():
-        print("[HS] rejected opening packet")
-        return None
-
-    # remember who we are talking to (their ephemeral/bind port)
     global SENDER_PORT
     SENDER_PORT = addr[1]
-    risn = random.randint(2000, 6000)  # our random initial sequence number
+    risn = random.randint(2000, 6000)
 
     session = {
         "alive": True,
         "peer": addr,
         "local_seq": risn,
-        "expected_seq": None,   # filled after final ACK
-        "sender_mss": syn.mss,  # how much their seq advances per data segment
+        "expected_seq": None,
+        "sender_mss": syn.mss,
     }
 
-    #step 2 --> SYN-ACK (also advertise our smaller WINDOW_SIZE for flow control)
+    # Step 2 — SYN-ACK
     syn_ack = PacketHeader(
         RECEIVER_PORT, SENDER_PORT, risn, syn.seq_num + 1,
         WINDOW_SIZE, MSS, syn=True, ack=True, app_data="SYNACK",
@@ -82,20 +93,33 @@ def handshake(sock):
     sock.sendto(syn_ack.to_bytes(), addr)
     print(f"[HS] SYN-ACK seq={risn} ack={syn.seq_num + 1}")
 
-    # step 3 --> wait for final ACK
-    sock.settimeout(10)
-    try:
-        raw, addr2 = sock.recvfrom(4096)
-    except socket.timeout:
-        print("[HS] missing final ACK")
+    # Step 3 — wait for final ACK (ignore stray non-ACK packets)
+    final = None
+    ack_deadline = time.time() + 10
+    while time.time() < ack_deadline:
+        sock.settimeout(max(0.1, ack_deadline - time.time()))
+        try:
+            raw, addr2 = sock.recvfrom(4096)
+        except socket.timeout:
+            break
+
+        cand = PacketHeader.from_bytes(raw)
+        if (
+            addr2[1] == SENDER_PORT
+            and cand.ack
+            and not cand.syn
+            and not cand.fin
+            and cand.ack_num == risn + 1
+            and cand.verify_checksum()
+        ):
+            final = cand
+            break
+        print(f"[HS] ignore while waiting for final ACK (seq={cand.seq_num})")
+
+    if final is None:
+        print("[HS] missing / bad final ACK")
         return None
 
-    final = PacketHeader.from_bytes(raw)
-    if not (final.ack and final.ack_num == risn + 1 and final.verify_checksum()):
-        print("[HS] bad final ACK")
-        return None
-
-    # first DATA segment should be one past the final handshake ACK's seq
     session["expected_seq"] = final.seq_num + 1
     session["local_seq"] = risn + 1
     print(f"[HS] established  expect_seq={session['expected_seq']}")

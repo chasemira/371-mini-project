@@ -75,10 +75,13 @@ def udt_send(sock, packet, peer):
       - drop the packet (never call sendto), OR
       - corrupt it (flip checksum by +1) so the receiver will reject it.
 
-    Control packets (SYN / FIN / pure ACK) are left alone so handshake
-    and teardown stay easy to demonstrate while data is stressed.
+    Control packets (any segment with SYN / ACK / FIN set) are left alone
+    so handshake and teardown stay reliable. Only pure DATA segments
+    (no control flags) are candidates for loss/corruption.
     """
-    is_control = packet.syn or packet.fin or (packet.ack and not packet.app_data)
+    # IMPORTANT: final handshake ACK has ack=True AND a short app_data string.
+    # We must still treat it as control — otherwise loss can break the handshake.
+    is_control = packet.syn or packet.ack or packet.fin
 
     if (not is_control) and random.random() < LOSS_PROBABILITY:
         if random.random() < 0.5:
