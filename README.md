@@ -2,18 +2,20 @@
 
 Pipelined Reliable Transfer Protocol over UDP.
 
-## Files (keep it simple)
+## Layout
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
 | `header.py` | Packet header + checksum |
 | `sender.py` | Handshake, send, retransmit, congestion control, CWND plot |
 | `receiver.py` | Handshake, receive, ACK, write output |
 | `data.txt` | Payload to send |
-| `received_packets.txt` | Reconstructed payload (created at runtime) |
-| `REPORT.md` | Full report draft → export to PDF for Canvas |
+| `results/` | Run outputs (received text, CWND CSV logs) |
+| `figures/` | Report diagrams + Wireshark screenshots |
+| `captures/` | Wireshark `.pcapng` captures |
+| `fairness-test/` | Bonus fairness experiment (scripts, results, pictures) |
 
-## Run
+## Run (main protocol)
 
 ```bash
 # Terminal 1
@@ -23,7 +25,7 @@ python receiver.py
 python sender.py
 ```
 
-When finished: check `received_packets.txt` and `cwnd_growth.png`.
+When finished: check `results/received_packets.txt` and `figures/diagrams/cwnd_growth.png`.
 
 ## Experiments
 
@@ -36,3 +38,15 @@ Edit knobs at the top of `sender.py` / `receiver.py`:
 ## Wireshark
 
 Loopback interface, filter: `udp.port == 9000 or udp.port == 9001`
+
+Captures live in `captures/`.
+
+## Bonus: Fairness
+
+```bash
+python fairness-test/run_fairness.py
+python fairness-test/run_fairness.py --trials 5
+python fairness-test/plot_fairness.py
+```
+
+See `fairness-test/README.md` for details. Outputs land in `fairness-test/results/` and `fairness-test/pictures/`.

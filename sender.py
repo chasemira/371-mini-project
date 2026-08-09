@@ -14,7 +14,9 @@ How to run (start receiver first):
     python sender.py
 """
 
+import argparse
 import copy
+import os
 import random
 import socket
 import time
@@ -25,7 +27,7 @@ from header import PacketHeader
 
 HOST = "127.0.0.1"       # loopback so both sides run on this machine
 SENDER_PORT = 9001       # our local UDP bind port
-RECEIVER_PORT = 9000     # peer's UDP port
+RECEIVER_PORT = 9000     # peer's UDP port (or bottleneck relay port)
 WINDOW_SIZE = 8          # max segments WE are willing to have in flight
 MSS = 20                 # bytes of app data per segment (small => many packets)
 LOSS_PROBABILITY = 0.35  # chance each DATA packet is dropped OR corrupted
@@ -34,6 +36,16 @@ MAX_RETRIES = 8          # how many times to retry FIN if no FIN-ACK
 ALPHA = 0.125            # weight for EstimatedRTT (Jacobson/Karels)
 BETA = 0.25              # weight for DevRTT
 INITIAL_TIMEOUT = 1.5    # seconds, used before we have an RTT sample
+PAYLOAD_PATH = "data.txt"
+CWND_LOG_PATH = os.path.join("results", "cwnd_log.csv")
+CWND_PLOT_PATH = os.path.join("figures", "diagrams", "cwnd_growth.png")
+SHOW_PLOT = True
+
+
+def _ensure_parent(path):
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
 
 # congestion-control state (bytes, like TCP)
 CWND = MSS                                 # start cautious: 1 MSS
@@ -58,7 +70,8 @@ def log_cwnd(event=""):
     # record one CWND sample for the CSV log and the final plot
     cwnd_values.append(CWND)
     cwnd_times.append(time.time())
-    with open("cwnd_log.csv", "a", encoding="utf-8") as f:
+    _ensure_parent(CWND_LOG_PATH)
+    with open(CWND_LOG_PATH, "a", encoding="utf-8") as f:
         f.write(f"{time.time()},{CWND},{SSTHRESH},{congestion_state},{event}\n")
 
 
@@ -222,7 +235,8 @@ def send_data(sock, conn, chunks):
     global CWND, congestion_state
 
     # start a fresh CSV log for this run
-    with open("cwnd_log.csv", "w", encoding="utf-8") as f:
+    _ensure_parent(CWND_LOG_PATH)
+    with open(CWND_LOG_PATH, "w", encoding="utf-8") as f:
         f.write("time,cwnd,ssthresh,phase,event\n")
     log_cwnd("init")
 
@@ -370,22 +384,59 @@ def plot_cwnd():
     plt.title("Congestion Window over Time")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig("cwnd_growth.png", dpi=150)
-    print("Saved cwnd_growth.png")
-    try:
-        plt.show()
-    except Exception:
-        pass
+    _ensure_parent(CWND_PLOT_PATH)
+    plt.savefig(CWND_PLOT_PATH, dpi=150)
+    print(f"Saved {CWND_PLOT_PATH}")
+    if SHOW_PLOT:
+        try:
+            plt.show()
+        except Exception:
+            pass
+    else:
+        plt.close()
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="PRTP sender")
+    parser.add_argument("--sender-port", type=int, default=SENDER_PORT)
+    parser.add_argument("--receiver-port", type=int, default=RECEIVER_PORT,
+                        help="Peer port (receiver, or bottleneck relay)")
+    parser.add_argument("--payload", default=PAYLOAD_PATH)
+    parser.add_argument("--loss", type=float, default=None,
+                        help="Override LOSS_PROBABILITY")
+    parser.add_argument("--cwnd-log", default=CWND_LOG_PATH)
+    parser.add_argument("--cwnd-plot", default=CWND_PLOT_PATH)
+    parser.add_argument("--no-plot", action="store_true",
+                        help="Save plot file but do not open a window")
+    return parser.parse_args()
 
 
 def main():
-    # top-level: open connection -> send file -> close -> plot
-    data = read_data("data.txt")
+    global SENDER_PORT, RECEIVER_PORT, LOSS_PROBABILITY
+    global PAYLOAD_PATH, CWND_LOG_PATH, CWND_PLOT_PATH, SHOW_PLOT
+    global CWND, SSTHRESH, congestion_state, cwnd_values, cwnd_times
+
+    args = parse_args()
+    SENDER_PORT = args.sender_port
+    RECEIVER_PORT = args.receiver_port
+    PAYLOAD_PATH = args.payload
+    CWND_LOG_PATH = args.cwnd_log
+    CWND_PLOT_PATH = args.cwnd_plot
+    SHOW_PLOT = not args.no_plot
+    if args.loss is not None:
+        LOSS_PROBABILITY = args.loss
+
+    CWND = MSS
+    SSTHRESH = (WINDOW_SIZE * MSS) // 2
+    congestion_state = SLOW_START
+    cwnd_values = []
+    cwnd_times = []
+
+    data = read_data(PAYLOAD_PATH)
     chunks = prepare_packets(data)
     if not chunks:
-        raise SystemExit("data.txt is empty")
+        raise SystemExit("payload file is empty")
 
-    # UDP socket (SOCK_DGRAM) — unreliable by design; we add reliability above it
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((HOST, SENDER_PORT))
 

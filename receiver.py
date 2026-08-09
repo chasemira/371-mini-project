@@ -4,7 +4,7 @@ receiver.py --> server side of our Pipelined Reliable Transfer Protocol
 Listens on UDP, accepts a 3-way handshake, then:
   - accepts ONLY the next expected sequence number (Go-Back-N receiver)
   - drops corrupt or out-of-order segments (no ACK for those)
-  - writes good payloads, in order, to received_packets.txt
+  - writes good payloads, in order, to results/received_packets.txt
   - ACKs each accepted segment and advertises our window (flow control)
   - closes cleanly on FIN with a FIN-ACK
 
@@ -12,6 +12,8 @@ How to run (start this BEFORE the sender):
     python receiver.py
 """
 
+import argparse
+import csv
 import os
 import random
 import socket
@@ -25,18 +27,37 @@ SENDER_PORT = 9001       # overwritten with the real peer port when SYN arrives
 WINDOW_SIZE = 4          # smaller than sender's 8 on purpose (shows flow control)
 MSS = 20                 # must match sender MSS for sequence arithmetic
 TIMEOUT = 60             # seconds to wait for the initial SYN
+OUTPUT_PATH = os.path.join("results", "received_packets.txt")
+THROUGHPUT_PATH = None   # optional CSV: time,cumulative_bytes
 
 
-def clear_output(path="received_packets.txt"):
+def _ensure_parent(path):
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
+
+def clear_output(path=None):
     # delete any leftover output from a previous run so this run starts clean
+    path = path or OUTPUT_PATH
+    _ensure_parent(path)
     if os.path.exists(path):
         os.remove(path)
 
 
-def log_packet(payload, path="received_packets.txt"):
-    # append 1 accepted payload chunk to output file 
+def log_packet(payload, path=None):
+    # append 1 accepted payload chunk to output file
+    path = path or OUTPUT_PATH
+    _ensure_parent(path)
     with open(path, "a", encoding="utf-8") as f:
         f.write(payload)
+
+
+def log_throughput(cumulative_bytes):
+    if not THROUGHPUT_PATH:
+        return
+    with open(THROUGHPUT_PATH, "a", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow([f"{time.time():.6f}", cumulative_bytes])
 
 
 def handshake(sock):
@@ -149,6 +170,7 @@ def receive_data(sock, session):
     returning True means we saw FIN; False means we idled out.
     """
     expected = session["expected_seq"]
+    total_bytes = 0
     sock.settimeout(30)  # idle gap long enough for sender RTOs under loss
 
     while True:
@@ -184,6 +206,8 @@ def receive_data(sock, session):
 
         # good packet: deliver to "app" (file) and acknowledge
         log_packet(pkt.app_data)
+        total_bytes += len(pkt.app_data.encode("utf-8"))
+        log_throughput(total_bytes)
         print(f"[RECV] seq={pkt.seq_num}  '{pkt.app_data[:30]}'")
         send_ack(sock, session, pkt.seq_num)
 
@@ -212,11 +236,30 @@ def finish(sock, session):
         print("[FIN] closed (no final ACK)")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="PRTP receiver")
+    parser.add_argument("--port", type=int, default=RECEIVER_PORT)
+    parser.add_argument("--output", default=OUTPUT_PATH)
+    parser.add_argument("--throughput", default=None,
+                        help="Optional CSV path: time,cumulative_bytes")
+    return parser.parse_args()
+
+
 def main():
     """Top-level: listen -> handshake -> receive file -> teardown."""
-    clear_output()
+    global RECEIVER_PORT, OUTPUT_PATH, THROUGHPUT_PATH
 
-    # UDP socket --> same unreliable channel the sender uses
+    args = parse_args()
+    RECEIVER_PORT = args.port
+    OUTPUT_PATH = args.output
+    THROUGHPUT_PATH = args.throughput
+
+    clear_output()
+    if THROUGHPUT_PATH:
+        _ensure_parent(THROUGHPUT_PATH)
+        with open(THROUGHPUT_PATH, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(["time", "cumulative_bytes"])
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((HOST, RECEIVER_PORT))
     print(f"=== Receiver on {HOST}:{RECEIVER_PORT} ===")
@@ -226,12 +269,11 @@ def main():
         sock.close()
         raise SystemExit("Handshake failed")
 
-    # only run FIN exchange if the data loop ended because of FIN
     if receive_data(sock, session):
         finish(sock, session)
 
     sock.close()
-    print("Wrote received_packets.txt")
+    print(f"Wrote {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
