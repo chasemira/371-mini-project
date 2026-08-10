@@ -1,12 +1,8 @@
 """
-tcp_comparison.py — Step Five, part one: run our protocol alongside real TCP traffic.
-
-The fairness test (fairness_test.py) runs our protocol against copies of itself.
-This runs it against a different transport entirely, which is what "test your
-protocol with other traffic" asks for.
+tcp_comparison.py: Run our protocol alongside real TCP traffic.
 
 Method:
-  1. Measure our protocol alone. This is the baseline.
+  1. Measure our protocol alone.
   2. Start a saturating TCP transfer on loopback (a plain socket server and
      client moving data as fast as they can), and measure our protocol again
      while that load is running.
@@ -15,8 +11,6 @@ Method:
 We also record the TCP flow's own throughput over the same window, so the two
 transports can be compared rather than only observing that ours slowed down.
 
-Usage:
-    ./venv/bin/python tcp_comparison.py [trials]
 """
 
 import filecmp
@@ -104,13 +98,11 @@ def run_protocol():
     if os.path.exists(out):
         os.remove(out)
 
-    rx = subprocess.Popen([PY, "receiver.py"], cwd=HERE, env=env,
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    rx = subprocess.Popen([PY, "receiver.py"], cwd=HERE, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(0.6)
 
     t0 = time.time()
-    subprocess.run([PY, "sender.py"], cwd=HERE, env=env,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+    subprocess.run([PY, "sender.py"], cwd=HERE, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
     elapsed = time.time() - t0
 
     try:
@@ -128,8 +120,7 @@ def set_loss(rate):
     """Rewrite LOSS_PROBABILITY in sender.py."""
     path = os.path.join(HERE, "sender.py")
     src = open(path).read()
-    src = re.sub(r"^LOSS_PROBABILITY = [\d.]+",
-                 f"LOSS_PROBABILITY = {rate}", src, count=1, flags=re.M)
+    src = re.sub(r"^LOSS_PROBABILITY = [\d.]+", f"LOSS_PROBABILITY = {rate}", src, count=1, flags=re.M)
     open(path, "w").write(src)
 
 
@@ -146,8 +137,7 @@ def measure(trials):
 
 def report(label, times, oks, size):
     avg = sum(times) / len(times)
-    print(f"    {label:<16} avg {avg:6.2f}s  (min {min(times):5.2f}  "
-          f"max {max(times):5.2f})   {size/avg:8.1f} B/s   correct {oks}/{len(times)}")
+    print(f"    {label:<16} avg {avg:6.2f}s  (min {min(times):5.2f}  "f"max {max(times):5.2f})   {size/avg:8.1f} B/s   correct {oks}/{len(times)}")
     return avg
 
 
@@ -159,9 +149,7 @@ def main():
 
     print(f"{size}-byte transfer, {trials} trials per condition\n")
     try:
-        # 0% isolates the effect of the competing traffic: with no injected
-        # loss the transfer time barely varies, so any slowdown is real.
-        # 35% is the configured default, where retransmission noise dominates.
+        # test under 0% and 35% L/C rate
         for rate in (0.0, 0.35):
             set_loss(rate)
             print(f"loss rate {rate:.0%}")
