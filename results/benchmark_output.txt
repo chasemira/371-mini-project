@@ -1,0 +1,51 @@
+benchmark: 289-byte payload, 5 trials per loss rate
+run at 2026-08-10 17:31:30
+
+  loss=0.0   trial 1:   0.63s  retransmits=0   correct=True
+  loss=0.0   trial 2:   0.33s  retransmits=0   correct=True
+  loss=0.0   trial 3:   0.42s  retransmits=0   correct=True
+  loss=0.0   trial 4:   0.36s  retransmits=0   correct=True
+  loss=0.0   trial 5:   0.33s  retransmits=0   correct=True
+  -> loss=0.0   avg=  0.41s  min= 0.33  max= 0.63    702.4 B/s  rexmit=  0.0  correct=5/5
+
+  loss=0.02  trial 1:   2.30s  retransmits=2   correct=True
+  loss=0.02  trial 2:   0.33s  retransmits=0   correct=True
+  loss=0.02  trial 3:   0.34s  retransmits=0   correct=True
+  loss=0.02  trial 4:   0.34s  retransmits=0   correct=True
+  loss=0.02  trial 5:   0.35s  retransmits=0   correct=True
+  -> loss=0.02  avg=  0.73s  min= 0.33  max= 2.30    394.9 B/s  rexmit=  0.4  correct=5/5
+
+  loss=0.1   trial 1:   5.21s  retransmits=12  correct=True
+  loss=0.1   trial 2:   6.43s  retransmits=10  correct=True
+  loss=0.1   trial 3:   5.20s  retransmits=10  correct=True
+  loss=0.1   trial 4:   8.42s  retransmits=17  correct=True
+  loss=0.1   trial 5:   1.88s  retransmits=1   correct=True
+  -> loss=0.1   avg=  5.43s  min= 1.88  max= 8.42     53.2 B/s  rexmit= 10.0  correct=5/5
+
+  loss=0.2   trial 1:  10.81s  retransmits=19  correct=True
+  loss=0.2   trial 2:   5.69s  retransmits=9   correct=True
+  loss=0.2   trial 3:   7.28s  retransmits=13  correct=True
+  loss=0.2   trial 4:   4.53s  retransmits=10  correct=True
+  loss=0.2   trial 5:   4.86s  retransmits=10  correct=True
+  -> loss=0.2   avg=  6.63s  min= 4.53  max=10.81     43.6 B/s  rexmit= 12.2  correct=5/5
+
+  loss=0.35  trial 1:  11.65s  retransmits=19  correct=True
+  loss=0.35  trial 2:  22.87s  retransmits=23  correct=True
+  loss=0.35  trial 3:  13.82s  retransmits=19  correct=True
+  loss=0.35  trial 4:  12.78s  retransmits=20  correct=True
+  loss=0.35  trial 5:   8.83s  retransmits=16  correct=True
+  -> loss=0.35  avg= 13.99s  min= 8.83  max=22.87     20.7 B/s  rexmit= 19.4  correct=5/5
+
+==============================================================================
+Loss         Avg     Min     Max    Throughput   Retransmits   Correct
+==============================================================================
+0%         0.41s   0.33s   0.63s      702.4 B/s           0.0      5/5
+2%         0.73s   0.33s   2.30s      394.9 B/s           0.4      5/5
+10%        5.43s   1.88s   8.42s       53.2 B/s          10.0      5/5
+20%        6.63s   4.53s  10.81s       43.6 B/s          12.2      5/5
+35%       13.99s   8.83s  22.87s       20.7 B/s          19.4      5/5
+==============================================================================
+
+25/25 transfers byte-identical to source
+
+wrote results/benchmark.csv and results/benchmark_output.txt
