@@ -1,6 +1,6 @@
-# CMPT 371 Mini-Project — Option (2)
+# Pipelined Reliable Transfer Protocol over UDP.
 
-Pipelined Reliable Transfer Protocol over UDP.
+CMPT 371 Mini Project
 
 ## Layout
 
